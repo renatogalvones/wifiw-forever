@@ -321,6 +321,50 @@ h1 span {
   color: #ff9f8f;
   font-weight: 700;
 }
+.player-stats-content {
+  border-top: 1px solid var(--line);
+}
+.player-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.player-stat-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: #15221b;
+}
+.player-stat-card h3 {
+  margin: 0;
+  padding: 16px;
+  color: var(--lime);
+  font: 600 22px/1.1 Oswald, sans-serif;
+  text-transform: uppercase;
+}
+.player-stat-scroll {
+  border-top: 1px solid var(--line);
+}
+.player-stat-scroll table {
+  min-width: 365px;
+}
+.player-stat-scroll th,
+.player-stat-scroll td {
+  padding-left: 9px;
+  padding-right: 9px;
+}
+.player-stat-scroll th:nth-child(2),
+.player-stat-scroll td:nth-child(2) {
+  text-align: left;
+}
+.player-stat-scroll td:nth-child(2) {
+  color: var(--cream);
+  font-size: 12px;
+  font-weight: 600;
+}
+.player-stat-scroll td:last-child {
+  color: var(--lime);
+  font-weight: 700;
+}
 .best-games-head {
   padding-top: 72px;
 }
@@ -702,6 +746,9 @@ footer b {
   }
   .resenha-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .player-stats-grid {
+    grid-template-columns: 1fr;
   }
   .resenha-stats > div:nth-child(2) {
     border-right: 0;

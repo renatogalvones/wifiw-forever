@@ -1,6 +1,7 @@
 const sections = [
   { id: 'resenha', label: 'Recolhas' },
   { id: 'rivalidade', label: 'Rivalidade' },
+  { id: 'estatisticas', label: 'Estatísticas' },
   { id: 'gloria', label: 'Glória' },
   { id: 'wifiw-para-sempre', label: 'WiFIW para sempre' },
 ] as const

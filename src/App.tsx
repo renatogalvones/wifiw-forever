@@ -9,7 +9,7 @@ type Page = 'home' | ArchivePageId
 
 function pageFromHash(): Page {
   const hash = window.location.hash.slice(1)
-  return ['resenha', 'rivalidade', 'gloria', 'wifiw-para-sempre'].includes(hash)
+  return ['resenha', 'rivalidade', 'estatisticas', 'gloria', 'wifiw-para-sempre'].includes(hash)
     ? (hash as ArchivePageId)
     : 'home'
 }

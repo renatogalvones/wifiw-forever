@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { RankingPlayer } from '../types'
 import { supabase } from '../lib/supabase'
+import { useChampionshipPositionStats } from '../hooks/useChampionshipPositionStats'
 import {
   canonicalRivalryPlayer,
   displayRivalryPlayer,
   useRivalryMatches,
 } from '../hooks/useRivalryMatches'
 
-export type ArchivePageId = 'resenha' | 'rivalidade' | 'gloria' | 'wifiw-para-sempre'
+export type ArchivePageId = 'resenha' | 'rivalidade' | 'estatisticas' | 'gloria' | 'wifiw-para-sempre'
 
 type ArchivePageProps = {
   page: ArchivePageId
@@ -17,6 +18,7 @@ type ArchivePageProps = {
 const pageTitles: Record<ArchivePageId, string> = {
   resenha: 'Recolhas',
   rivalidade: 'Rivalidade',
+  estatisticas: 'Estatísticas',
   gloria: 'Glórias',
   'wifiw-para-sempre': 'WiFIW para sempre',
 }
@@ -370,6 +372,168 @@ function Resenha({ players }: { players: RankingPlayer[] }) {
   )
 }
 
+type PlayerMatchStats = {
+  player: string
+  goalsScored: number
+  goalsConceded: number
+  wins: number
+  losses: number
+  goalDifference: number
+  draws: number
+  top3: number
+  top5: number
+  z4: number
+}
+
+type PlayerStatKey =
+  | 'goalsScored'
+  | 'goalsConceded'
+  | 'wins'
+  | 'losses'
+  | 'goalDifference'
+  | 'draws'
+  | 'top3'
+  | 'top5'
+  | 'z4'
+
+const playerStatLists: Array<{ key: PlayerStatKey; title: string }> = [
+  { key: 'goalsScored', title: 'Gols marcados' },
+  { key: 'goalsConceded', title: 'Gols sofridos' },
+  { key: 'wins', title: 'Vitórias' },
+  { key: 'losses', title: 'Derrotas' },
+  { key: 'goalDifference', title: 'Saldo de gols' },
+  { key: 'draws', title: 'Empates' },
+  { key: 'top3', title: 'Top 3' },
+  { key: 'top5', title: 'Top 5' },
+  { key: 'z4', title: 'Z4' },
+]
+
+function Estatisticas({ players }: { players: RankingPlayer[] }) {
+  const { matches, loading, error } = useRivalryMatches()
+  const { finishes, loading: finishesLoading, error: finishesError } = useChampionshipPositionStats()
+  const [selectedSeason, setSelectedSeason] = useState('all')
+
+  const seasons = useMemo(() => [...new Set(
+    matches.flatMap(({ season }) => season ? [season] : []),
+  )].sort((a, b) => b.localeCompare(a, 'pt-BR', { numeric: true })), [matches])
+
+  const filteredMatches = useMemo(
+    () => selectedSeason === 'all'
+      ? matches
+      : matches.filter((match) => match.season === selectedSeason),
+    [matches, selectedSeason],
+  )
+
+  const rankings = useMemo(() => {
+    const statsByPlayer = new Map<string, PlayerMatchStats>()
+    const playerOrder: string[] = []
+    const addPlayer = (name: string) => {
+      const player = canonicalRivalryPlayer(name)
+      if (statsByPlayer.has(player)) return statsByPlayer.get(player)!
+      const stats: PlayerMatchStats = {
+        player,
+        goalsScored: 0,
+        goalsConceded: 0,
+        wins: 0,
+        losses: 0,
+        goalDifference: 0,
+        draws: 0,
+        top3: 0,
+        top5: 0,
+        z4: 0,
+      }
+      statsByPlayer.set(player, stats)
+      playerOrder.push(player)
+      return stats
+    }
+
+    for (const { player_key } of players) addPlayer(player_key)
+    for (const match of filteredMatches) {
+      const home = addPlayer(match.home_player)
+      const away = addPlayer(match.away_player)
+      home.goalsScored += match.home_score
+      home.goalsConceded += match.away_score
+      away.goalsScored += match.away_score
+      away.goalsConceded += match.home_score
+      if (match.home_score === match.away_score) {
+        home.draws += 1
+        away.draws += 1
+      } else if (match.home_score > match.away_score) {
+        home.wins += 1
+        away.losses += 1
+      } else {
+        away.wins += 1
+        home.losses += 1
+      }
+    }
+
+    for (const finish of finishes) {
+      if (selectedSeason !== 'all' && finish.season !== selectedSeason) continue
+      const player = addPlayer(finish.player)
+      player.top3 += finish.top3
+      player.top5 += finish.top5
+      player.z4 += finish.z4
+    }
+
+    for (const stats of statsByPlayer.values()) {
+      stats.goalDifference = stats.goalsScored - stats.goalsConceded
+    }
+
+    const historicalOrder = new Map(playerOrder.map((player, index) => [player, index]))
+    return Object.fromEntries(playerStatLists.map(({ key }) => [
+      key,
+      [...statsByPlayer.values()].sort((a, b) =>
+        b[key] - a[key] ||
+        (historicalOrder.get(a.player) ?? Number.MAX_SAFE_INTEGER) -
+          (historicalOrder.get(b.player) ?? Number.MAX_SAFE_INTEGER) ||
+        displayRivalryPlayer(a.player).localeCompare(displayRivalryPlayer(b.player), 'pt-BR'),
+      ),
+    ])) as Record<PlayerStatKey, PlayerMatchStats[]>
+  }, [filteredMatches, finishes, players, selectedSeason])
+
+  if (loading || finishesLoading) return <p className="page-message">Carregando estatísticas...</p>
+  if (error || finishesError) return <p className="page-message page-error">Não foi possível carregar as estatísticas: {error ?? finishesError}</p>
+
+  return (
+    <div className="player-stats-content">
+      <div className="resenha-toolbar">
+        <p>{selectedSeason === 'all' ? 'Todos os tempos' : `Temporada ${selectedSeason}`}</p>
+        <label>
+          <span>Filtrar temporada</span>
+          <select value={selectedSeason} onChange={(event) => setSelectedSeason(event.target.value)}>
+            <option value="all">Todos os tempos</option>
+            {seasons.map((season) => <option key={season} value={season}>{season}</option>)}
+          </select>
+        </label>
+      </div>
+
+      <div className="player-stats-grid">
+        {playerStatLists.map(({ key, title }) => (
+          <section className="player-stat-card" key={key}>
+            <h3>{title}</h3>
+            <div className="scroll player-stat-scroll">
+              <table>
+                <thead>
+                  <tr><th>Pos.</th><th>Treinador</th><th>Total</th></tr>
+                </thead>
+                <tbody>
+                  {rankings[key].map((record, index) => (
+                    <tr key={record.player}>
+                      <td>{String(index + 1).padStart(2, '0')}</td>
+                      <td>{displayRivalryPlayer(record.player)}</td>
+                      <td>{record[key] > 0 && key === 'goalDifference' ? `+${record[key].toLocaleString('pt-BR')}` : record[key].toLocaleString('pt-BR')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 type ChampionshipTitle = {
   championshipId: number
   championshipName: string
@@ -498,15 +662,17 @@ export function ArchivePage({ page, players }: ArchivePageProps) {
           <div className="eyebrow">Arquivo WiFIW</div>
           <h2>{pageTitles[page]}</h2>
         </div>
-        {page !== 'rivalidade' && page !== 'resenha' && page !== 'gloria' && <p className="hint">Em breve</p>}
+        {page !== 'rivalidade' && page !== 'resenha' && page !== 'estatisticas' && page !== 'gloria' && <p className="hint">Em breve</p>}
       </div>
       {page === 'rivalidade'
         ? <Rivalidade players={players} />
         : page === 'resenha'
           ? <Resenha players={players} />
-          : page === 'gloria'
-            ? <Glorias players={players} />
-            : <p className="coming-soon">Em breve</p>}
+          : page === 'estatisticas'
+            ? <Estatisticas players={players} />
+            : page === 'gloria'
+              ? <Glorias players={players} />
+              : <p className="coming-soon">Em breve</p>}
     </section>
   )
 }
