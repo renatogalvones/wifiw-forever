@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { RankingPlayer } from '../types'
+import { supabase } from '../lib/supabase'
 import {
   canonicalRivalryPlayer,
   displayRivalryPlayer,
@@ -16,7 +17,7 @@ type ArchivePageProps = {
 const pageTitles: Record<ArchivePageId, string> = {
   resenha: 'Recolhas',
   rivalidade: 'Rivalidade',
-  gloria: 'Glória',
+  gloria: 'Glórias',
   'wifiw-para-sempre': 'WiFIW para sempre',
 }
 
@@ -369,6 +370,126 @@ function Resenha({ players }: { players: RankingPlayer[] }) {
   )
 }
 
+type ChampionshipTitle = {
+  championshipId: number
+  championshipName: string
+  season: string | null
+  champion: string
+  team: string | null
+}
+
+function Glorias({ players }: { players: RankingPlayer[] }) {
+  const [titles, setTitles] = useState<ChampionshipTitle[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadTitles() {
+      const { data, error: queryError } = await supabase
+        .from('wifiw_championships')
+        .select('arena17_id,name,status,champion_player,champion_team')
+        .order('arena17_id', { ascending: true })
+
+      if (queryError) throw queryError
+
+      const result = (data ?? []).flatMap((championship) => {
+        if (championship.status !== 'finalizado' || !championship.champion_player) return []
+        const seasonMatch = championship.name.match(/(20\d{2})\/(20\d{2})/)
+        return [{
+          championshipId: championship.arena17_id,
+          championshipName: championship.name,
+          season: seasonMatch ? `${seasonMatch[1]}/${seasonMatch[2]}` : null,
+          champion: canonicalRivalryPlayer(championship.champion_player),
+          team: championship.champion_team,
+        }]
+      })
+
+      if (!cancelled) {
+        setTitles(result)
+        setLoading(false)
+      }
+    }
+
+    loadTitles().catch((loadError: unknown) => {
+      if (cancelled) return
+      setError(loadError instanceof Error ? loadError.message : String(loadError))
+      setLoading(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const coaches = useMemo(() => {
+    const titlesByCoach = new Map<string, ChampionshipTitle[]>()
+    for (const title of titles) {
+      const records = titlesByCoach.get(title.champion) ?? []
+      records.push(title)
+      titlesByCoach.set(title.champion, records)
+    }
+
+    const rankedNames = [...new Set(players.map(({ player_key }) => canonicalRivalryPlayer(player_key)))]
+    const coachesInOrder = rankedNames.map((player) => ({ player, position: players.find(
+      ({ player_key }) => canonicalRivalryPlayer(player_key) === player,
+    )?.position ?? null }))
+    const rankedSet = new Set(rankedNames)
+    const unrankedCoaches = [...titlesByCoach.keys()]
+      .filter((player) => !rankedSet.has(player))
+      .sort((a, b) => (titlesByCoach.get(b)?.length ?? 0) - (titlesByCoach.get(a)?.length ?? 0))
+      .map((player) => ({ player, position: null }))
+
+    return [...coachesInOrder, ...unrankedCoaches].map(({ player, position }) => ({
+      player,
+      position,
+      titles: (titlesByCoach.get(player) ?? []).sort((a, b) => {
+        const yearOrder = (b.season ?? '').localeCompare(a.season ?? '', 'pt-BR', { numeric: true })
+        return yearOrder || b.championshipId - a.championshipId
+      }),
+    }))
+  }, [players, titles])
+
+  if (loading) return <p className="page-message">Carregando títulos...</p>
+  if (error) return <p className="page-message page-error">Não foi possível carregar os títulos: {error}</p>
+
+  return (
+    <div className="glorias-content">
+      <div className="glorias-intro">
+        <div className="eyebrow">Histórico de campeões</div>
+        <p>Treinadores em ordem da classificação histórica, com seus títulos e os times que comandaram.</p>
+      </div>
+      <div className="glorias-list">
+        {coaches.map(({ player, position, titles: coachTitles }, index) => (
+          <article className="gloria-coach" key={player}>
+            <div className="gloria-coach-head">
+              <span className="gloria-position">{String(position ?? index + 1).padStart(2, '0')}</span>
+              <h3>{displayRivalryPlayer(player)}</h3>
+              <span className="gloria-title-count">
+                {coachTitles.length} {coachTitles.length === 1 ? 'título' : 'títulos'}
+              </span>
+            </div>
+            {coachTitles.length > 0 ? (
+              <ul className="gloria-titles">
+                {coachTitles.map((title) => (
+                  <li key={title.championshipId}>
+                    <strong>{title.season ?? 'Ano não informado'}</strong>
+                    <span>{title.championshipName}</span>
+                    <span className="gloria-team">{title.team ?? 'Time não informado'}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="gloria-no-titles">Nenhum título registrado.</p>
+            )}
+          </article>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function ArchivePage({ page, players }: ArchivePageProps) {
   return (
     <section className="section archive-page">
@@ -377,13 +498,15 @@ export function ArchivePage({ page, players }: ArchivePageProps) {
           <div className="eyebrow">Arquivo WiFIW</div>
           <h2>{pageTitles[page]}</h2>
         </div>
-        {page !== 'rivalidade' && page !== 'resenha' && <p className="hint">Em breve</p>}
+        {page !== 'rivalidade' && page !== 'resenha' && page !== 'gloria' && <p className="hint">Em breve</p>}
       </div>
       {page === 'rivalidade'
         ? <Rivalidade players={players} />
         : page === 'resenha'
           ? <Resenha players={players} />
-          : <p className="coming-soon">Em breve</p>}
+          : page === 'gloria'
+            ? <Glorias players={players} />
+            : <p className="coming-soon">Em breve</p>}
     </section>
   )
 }

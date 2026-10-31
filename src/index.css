@@ -360,6 +360,82 @@ h1 span {
 .best-games-scroll table {
   min-width: 850px;
 }
+.glorias-content {
+  border-top: 1px solid var(--line);
+}
+.glorias-intro {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 0 32px;
+}
+.glorias-intro p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.glorias-list {
+  display: grid;
+  gap: 10px;
+}
+.gloria-coach {
+  border: 1px solid var(--line);
+  background: #15221b;
+}
+.gloria-coach-head {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+}
+.gloria-position {
+  color: var(--lime);
+  font: 500 22px Oswald, sans-serif;
+}
+.gloria-coach-head h3 {
+  margin: 0;
+  color: var(--cream);
+  font: 600 24px/1.1 Oswald, sans-serif;
+}
+.gloria-title-count {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.gloria-titles {
+  margin: 0;
+  padding: 0 20px 14px 88px;
+  list-style: none;
+}
+.gloria-titles li {
+  display: grid;
+  grid-template-columns: 105px minmax(0, 1fr) minmax(130px, 220px);
+  gap: 14px;
+  align-items: baseline;
+  padding: 11px 0;
+  border-top: 1px solid #2d3c31;
+  color: #c5d1c4;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.gloria-titles li strong {
+  color: var(--lime);
+  white-space: nowrap;
+}
+.gloria-team {
+  color: var(--muted);
+  text-align: right;
+}
+.gloria-no-titles {
+  margin: 0;
+  padding: 0 20px 18px 88px;
+  color: #849184;
+  font-size: 12px;
+}
 .section {
   padding: 80px 0;
 }
@@ -636,6 +712,33 @@ footer b {
   }
   .resenha-stats > div:first-child {
     padding-left: 18px;
+  }
+  .glorias-intro {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .gloria-coach-head {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 9px;
+    padding: 14px;
+  }
+  .gloria-coach-head h3 {
+    font-size: 20px;
+  }
+  .gloria-titles {
+    padding: 0 14px 12px;
+  }
+  .gloria-titles li {
+    grid-template-columns: 90px minmax(0, 1fr);
+    gap: 5px 10px;
+  }
+  .gloria-team {
+    grid-column: 2;
+    text-align: left;
+  }
+  .gloria-no-titles {
+    padding: 0 14px 16px;
   }
   .section {
     padding: 55px 0;
