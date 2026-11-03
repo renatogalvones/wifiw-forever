@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { RankingPlayer } from '../types'
 import { supabase } from '../lib/supabase'
 import { useChampionshipPositionStats } from '../hooks/useChampionshipPositionStats'
+import { useChampionshipTitleSequences } from '../hooks/useChampionshipTitleSequences'
+import { useSeasonChampionshipWins } from '../hooks/useSeasonChampionshipWins'
 import {
   canonicalRivalryPlayer,
   displayRivalryPlayer,
@@ -397,20 +399,31 @@ type PlayerStatKey =
   | 'z4'
 
 const playerStatLists: Array<{ key: PlayerStatKey; title: string }> = [
-  { key: 'goalsScored', title: 'Gols marcados' },
-  { key: 'goalsConceded', title: 'Gols sofridos' },
   { key: 'wins', title: 'Vitórias' },
   { key: 'losses', title: 'Derrotas' },
-  { key: 'goalDifference', title: 'Saldo de gols' },
   { key: 'draws', title: 'Empates' },
+  { key: 'goalsScored', title: 'Gols pró' },
+  { key: 'goalsConceded', title: 'Gols contra' },
+  { key: 'goalDifference', title: 'Saldo de gols' },
   { key: 'top3', title: 'Top 3' },
   { key: 'top5', title: 'Top 5' },
   { key: 'z4', title: 'Z4' },
 ]
 
+const funStatLists: Array<{ key: PlayerStatKey; title: string }> = [
+  { key: 'wins', title: 'Vitórias' },
+  { key: 'losses', title: 'Derrotas' },
+  { key: 'draws', title: 'Empates' },
+  { key: 'goalsScored', title: 'Gols pró' },
+  { key: 'goalsConceded', title: 'Gols contra' },
+  { key: 'goalDifference', title: 'Saldo de gols' },
+]
+
 function Estatisticas({ players }: { players: RankingPlayer[] }) {
   const { matches, loading, error } = useRivalryMatches()
   const { finishes, loading: finishesLoading, error: finishesError } = useChampionshipPositionStats()
+  const { sequences, loading: sequencesLoading, error: sequencesError } = useChampionshipTitleSequences()
+  const { seasonWins, loading: seasonWinsLoading, error: seasonWinsError } = useSeasonChampionshipWins()
   const [selectedSeason, setSelectedSeason] = useState('all')
 
   const seasons = useMemo(() => [...new Set(
@@ -423,6 +436,92 @@ function Estatisticas({ players }: { players: RankingPlayer[] }) {
       : matches.filter((match) => match.season === selectedSeason),
     [matches, selectedSeason],
   )
+
+  const funStats = useMemo(() => {
+    const seasonStats = new Map<string, Map<string, PlayerMatchStats>>()
+
+    for (const match of matches) {
+      if (!match.season) continue
+      let statsByPlayer = seasonStats.get(match.season)
+      if (!statsByPlayer) {
+        statsByPlayer = new Map()
+        seasonStats.set(match.season, statsByPlayer)
+      }
+
+      const getPlayerStats = (playerName: string) => {
+        const player = canonicalRivalryPlayer(playerName)
+        const current = statsByPlayer!.get(player)
+        if (current) return current
+        const initial: PlayerMatchStats = {
+          player,
+          goalsScored: 0,
+          goalsConceded: 0,
+          wins: 0,
+          losses: 0,
+          goalDifference: 0,
+          draws: 0,
+          top3: 0,
+          top5: 0,
+          z4: 0,
+        }
+        statsByPlayer!.set(player, initial)
+        return initial
+      }
+
+      const home = getPlayerStats(match.home_player)
+      const away = getPlayerStats(match.away_player)
+      home.goalsScored += match.home_score
+      home.goalsConceded += match.away_score
+      away.goalsScored += match.away_score
+      away.goalsConceded += match.home_score
+      if (match.home_score === match.away_score) {
+        home.draws += 1
+        away.draws += 1
+      } else if (match.home_score > match.away_score) {
+        home.wins += 1
+        away.losses += 1
+      } else {
+        away.wins += 1
+        home.losses += 1
+      }
+    }
+
+    for (const playersInSeason of seasonStats.values()) {
+      for (const stats of playersInSeason.values()) {
+        stats.goalDifference = stats.goalsScored - stats.goalsConceded
+      }
+    }
+
+    const historicalOrder = new Map(
+      players.map(({ player_key }, index) => [canonicalRivalryPlayer(player_key), index]),
+    )
+    const comparePlayers = (a: string, b: string) =>
+      (historicalOrder.get(a) ?? Number.MAX_SAFE_INTEGER) -
+        (historicalOrder.get(b) ?? Number.MAX_SAFE_INTEGER) ||
+      displayRivalryPlayer(a).localeCompare(displayRivalryPlayer(b), 'pt-BR')
+
+    return funStatLists.map(({ key, title }) => {
+      const allPerformances = [...seasonStats.entries()]
+        .flatMap(([season, playersInSeason]) => [...playersInSeason.values()].map((stats) => ({
+          season,
+          player: stats.player,
+          value: stats[key],
+        })))
+        .sort((a, b) =>
+          b.value - a.value ||
+          b.season.localeCompare(a.season, 'pt-BR', { numeric: true }) ||
+          comparePlayers(a.player, b.player),
+        )
+      const performances = allPerformances.slice(0, 20)
+      const recordValue = allPerformances.length
+        ? Math.max(...allPerformances.map(({ value }) => value))
+        : 0
+      const recordLeaders = allPerformances
+        .filter(({ value }) => value === recordValue)
+        .map(({ season, player }) => ({ season, player }))
+      return { key, title, performances, recordValue, recordLeaders }
+    })
+  }, [matches, players])
 
   const rankings = useMemo(() => {
     const statsByPlayer = new Map<string, PlayerMatchStats>()
@@ -491,11 +590,133 @@ function Estatisticas({ players }: { players: RankingPlayer[] }) {
     ])) as Record<PlayerStatKey, PlayerMatchStats[]>
   }, [filteredMatches, finishes, players, selectedSeason])
 
-  if (loading || finishesLoading) return <p className="page-message">Carregando estatísticas...</p>
-  if (error || finishesError) return <p className="page-message page-error">Não foi possível carregar as estatísticas: {error ?? finishesError}</p>
+  const topSeasonChampionshipWins = useMemo(() => {
+    const historicalOrder = new Map(
+      players.map(({ player_key }, index) => [canonicalRivalryPlayer(player_key), index]),
+    )
+    return [...seasonWins]
+      .sort((a, b) =>
+        b.wins - a.wins ||
+        b.season.localeCompare(a.season, 'pt-BR', { numeric: true }) ||
+        (historicalOrder.get(a.player) ?? Number.MAX_SAFE_INTEGER) -
+          (historicalOrder.get(b.player) ?? Number.MAX_SAFE_INTEGER) ||
+        displayRivalryPlayer(a.player).localeCompare(displayRivalryPlayer(b.player), 'pt-BR'),
+      )
+      .slice(0, 15)
+  }, [players, seasonWins])
+
+  if (loading || finishesLoading || sequencesLoading || seasonWinsLoading) return <p className="page-message">Carregando estatísticas...</p>
+  if (error || finishesError || sequencesError || seasonWinsError) return <p className="page-message page-error">Não foi possível carregar as estatísticas: {error ?? finishesError ?? sequencesError ?? seasonWinsError}</p>
 
   return (
     <div className="player-stats-content">
+      <section className="fun-stats-panel" aria-labelledby="fun-stats-title">
+        <div className="fun-stats-heading">
+          <div>
+            <div className="eyebrow">Recordes em uma temporada</div>
+            <h3 id="fun-stats-title">Estatísticas divertidas</h3>
+          </div>
+          <p>O painel mostra os líderes de cada temporada e o recorde histórico; o filtro abaixo vale para as listas gerais.</p>
+        </div>
+        <div className="fun-stats-grid">
+          {funStats.map(({ key, title, performances, recordValue, recordLeaders }) => (
+            <section className="fun-stat-card" key={key}>
+              <h4>{title}</h4>
+              <div className="fun-stat-record">
+                <span>Recorde de uma temporada</span>
+                <strong>{recordValue > 0 && key === 'goalDifference' ? `+${recordValue}` : recordValue}</strong>
+                <div>
+                  {recordLeaders.map(({ season, player }) => (
+                    <span key={`${season}-${player}`}>{displayRivalryPlayer(player)} · {season}</span>
+                  ))}
+                </div>
+              </div>
+              <div className="fun-season-leaders">
+                {performances.map(({ season, player, value }) => (
+                  <div className="fun-season-leader" key={`${season}-${player}`}>
+                    <span>{season}</span>
+                    <span>{displayRivalryPlayer(player)}</span>
+                    <strong>{value > 0 && key === 'goalDifference' ? `+${value}` : value}</strong>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      </section>
+
+      <section className="title-streaks" aria-labelledby="title-streaks-title">
+        <div className="resenha-list-head">
+          <div>
+            <div className="eyebrow">Campeões consecutivos</div>
+            <h3 id="title-streaks-title">Sequências de títulos</h3>
+          </div>
+          <p>Maior sequência primeiro</p>
+        </div>
+        {sequences.length === 0 ? (
+          <p className="page-message">Não há sequências de títulos consecutivos registradas.</p>
+        ) : (
+          <div className="scroll rivalry-scroll title-streaks-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Pos.</th>
+                  <th>Treinador</th>
+                  <th>Seguidos</th>
+                  <th>Campeonatos</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sequences.map((sequence, index) => (
+                  <tr key={`${sequence.firstId}-${sequence.lastId}`}>
+                    <td>{String(index + 1).padStart(2, '0')}</td>
+                    <td>{displayRivalryPlayer(sequence.champion)}</td>
+                    <td>{sequence.length}</td>
+                    <td>
+                      <ol className="title-streak-championships">
+                        {sequence.championships.map((championship, championshipIndex) => (
+                          <li key={`${sequence.firstId}-${championshipIndex}`}>{championship}</li>
+                        ))}
+                      </ol>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="season-title-tops title-streaks" aria-labelledby="season-title-tops-title">
+        <div className="resenha-list-head">
+          <div>
+            <div className="eyebrow">Mais campeonatos vencidos em uma temporada</div>
+            <h3 id="season-title-tops-title">Top 15 de títulos por temporada</h3>
+          </div>
+        </div>
+        {topSeasonChampionshipWins.length === 0 ? (
+          <p className="page-message">Não há títulos por temporada registrados.</p>
+        ) : (
+          <div className="scroll rivalry-scroll season-title-tops-scroll">
+            <table>
+              <thead>
+                <tr><th>Pos.</th><th>Treinador</th><th>Títulos na temporada</th><th>Temporada</th></tr>
+              </thead>
+              <tbody>
+                {topSeasonChampionshipWins.map(({ player, season, wins }, index) => (
+                  <tr key={`${player}-${season}`}>
+                    <td>{String(index + 1).padStart(2, '0')}</td>
+                    <td>{displayRivalryPlayer(player)}</td>
+                    <td>{wins}</td>
+                    <td>{season}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       <div className="resenha-toolbar">
         <p>{selectedSeason === 'all' ? 'Todos os tempos' : `Temporada ${selectedSeason}`}</p>
         <label>
