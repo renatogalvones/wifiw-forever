@@ -7,6 +7,11 @@ export type SeasonChampionshipWins = {
   player: string
   season: string
   wins: number
+  championships: Array<{ name: string; team: string | null }>
+}
+
+type SeasonWinnerChampionship = ChampionshipRecord & {
+  champion_team: string | null
 }
 
 type SeasonChampionshipWinsState = {
@@ -27,7 +32,7 @@ export function useSeasonChampionshipWins(): SeasonChampionshipWinsState {
 
     async function loadSeasonWins() {
       const [championshipsResult, linksResult, rankingsResult] = await Promise.all([
-        supabase.from('wifiw_championships').select('arena17_id,name,status,champion_player'),
+        supabase.from('wifiw_championships').select('arena17_id,name,status,champion_player,champion_team'),
         supabase.from('wifiw_ranking_championships').select('ranking_id,championship_id'),
         supabase.from('wifiw_rankings').select('arena17_id,name'),
       ])
@@ -35,7 +40,7 @@ export function useSeasonChampionshipWins(): SeasonChampionshipWinsState {
       const queryError = championshipsResult.error ?? linksResult.error ?? rankingsResult.error
       if (queryError) throw queryError
 
-      const championships = (championshipsResult.data ?? []) as ChampionshipRecord[]
+      const championships = (championshipsResult.data ?? []) as SeasonWinnerChampionship[]
       const links = (linksResult.data ?? []) as RankingChampionship[]
       const rankings = (rankingsResult.data ?? []) as Pick<RankingRecord, 'arena17_id' | 'name'>[]
 
@@ -63,8 +68,9 @@ export function useSeasonChampionshipWins(): SeasonChampionshipWinsState {
         if (!season) continue
         const player = canonicalRivalryPlayer(championship.champion_player)
         const key = `${player}\u0000${season}`
-        const record = winsByPlayerSeason.get(key) ?? { player, season, wins: 0 }
+        const record = winsByPlayerSeason.get(key) ?? { player, season, wins: 0, championships: [] }
         record.wins += 1
+        record.championships.push({ name: championship.name, team: championship.champion_team })
         winsByPlayerSeason.set(key, record)
       }
 

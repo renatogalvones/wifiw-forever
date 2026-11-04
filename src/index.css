@@ -352,6 +352,28 @@ h1 span {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
+.champion-team-stats .resenha-list-head {
+  padding: 38px 0 16px;
+}
+.champion-team-stats .resenha-list-head h4 {
+  margin: 10px 0 0;
+  color: var(--cream);
+  font: 600 clamp(22px, 3vw, 32px)/1 Oswald, sans-serif;
+  text-transform: uppercase;
+}
+.champion-team-stats-scroll table {
+  min-width: 1000px;
+}
+.champion-team-stats-scroll td:nth-child(3) {
+  color: var(--lime);
+  font-weight: 700;
+}
+.champion-team-coaches {
+  max-width: 850px;
+  text-align: left;
+  white-space: normal;
+  line-height: 1.6;
+}
 .fun-stat-card {
   min-width: 0;
   border: 1px solid var(--line);
@@ -450,6 +472,21 @@ h1 span {
   color: #c5d1c4;
   font-size: 12px;
   line-height: 1.5;
+}
+.title-streak-championships li {
+  padding-left: 2px;
+}
+.title-streak-championship-team {
+  color: var(--lime);
+  font-size: 11px;
+  font-weight: 600;
+}
+.season-title-tops-scroll table {
+  min-width: 1000px;
+}
+.season-title-winner-teams {
+  color: #c5d1c4;
+  text-align: left;
 }
 .player-stats-grid {
   display: grid;

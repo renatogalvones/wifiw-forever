@@ -6,19 +6,27 @@ import { supabase } from '../lib/supabase'
 export type ChampionshipTitleSequence = {
   champion: string
   length: number
-  championships: string[]
+  championships: Array<{ name: string; team: string | null }>
   firstId: number
   lastId: number
 }
 
+export type ChampionTeamSummary = {
+  team: string
+  titles: number
+  players: string[]
+}
+
 type ChampionshipTitleSequencesState = {
   sequences: ChampionshipTitleSequence[]
+  championTeams: ChampionTeamSummary[]
   loading: boolean
   error: string | null
 }
 
 type DatedChampionshipRecord = ChampionshipRecord & {
   championship_month: string | null
+  champion_team: string | null
 }
 
 function compareChampionshipChronology(a: DatedChampionshipRecord, b: DatedChampionshipRecord) {
@@ -38,6 +46,7 @@ function compareChampionshipChronology(a: DatedChampionshipRecord, b: DatedChamp
 
 export function useChampionshipTitleSequences(): ChampionshipTitleSequencesState {
   const [sequences, setSequences] = useState<ChampionshipTitleSequence[]>([])
+  const [championTeams, setChampionTeams] = useState<ChampionTeamSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -47,7 +56,7 @@ export function useChampionshipTitleSequences(): ChampionshipTitleSequencesState
     async function loadSequences() {
       const { data, error: queryError } = await supabase
         .from('wifiw_championships')
-        .select('arena17_id,name,status,champion_player,championship_month')
+        .select('arena17_id,name,status,champion_player,champion_team,championship_month')
 
       if (queryError) throw queryError
 
@@ -56,6 +65,7 @@ export function useChampionshipTitleSequences(): ChampionshipTitleSequencesState
         .filter(({ status }) => status === 'finalizado')
         .sort(compareChampionshipChronology)
       const result: ChampionshipTitleSequence[] = []
+      const teamSummaries = new Map<string, { titles: number; players: Set<string> }>()
       let current: DatedChampionshipRecord[] = []
 
       const saveSequence = () => {
@@ -63,7 +73,7 @@ export function useChampionshipTitleSequences(): ChampionshipTitleSequencesState
           result.push({
             champion: canonicalRivalryPlayer(current[0].champion_player),
             length: current.length,
-            championships: current.map(({ name }) => name),
+            championships: current.map(({ name, champion_team }) => ({ name, team: champion_team })),
             firstId: current[0].arena17_id,
             lastId: current[current.length - 1].arena17_id,
           })
@@ -75,6 +85,17 @@ export function useChampionshipTitleSequences(): ChampionshipTitleSequencesState
         const champion = championship.champion_player
           ? canonicalRivalryPlayer(championship.champion_player)
           : null
+
+        if (champion && championship.champion_team) {
+          const summary = teamSummaries.get(championship.champion_team) ?? {
+            titles: 0,
+            players: new Set<string>(),
+          }
+          summary.titles += 1
+          summary.players.add(champion)
+          teamSummaries.set(championship.champion_team, summary)
+        }
+
         const previousChampion = current.length && current[current.length - 1].champion_player
           ? canonicalRivalryPlayer(current[current.length - 1].champion_player!)
           : null
@@ -91,8 +112,12 @@ export function useChampionshipTitleSequences(): ChampionshipTitleSequencesState
       saveSequence()
 
       result.sort((a, b) => b.length - a.length || b.lastId - a.lastId)
+      const championTeamResults = [...teamSummaries.entries()]
+        .map(([team, summary]) => ({ team, titles: summary.titles, players: [...summary.players] }))
+        .sort((a, b) => b.titles - a.titles || a.team.localeCompare(b.team, 'pt-BR'))
       if (!cancelled) {
         setSequences(result)
+        setChampionTeams(championTeamResults)
         setLoading(false)
       }
     }
@@ -108,5 +133,5 @@ export function useChampionshipTitleSequences(): ChampionshipTitleSequencesState
     }
   }, [])
 
-  return { sequences, loading, error }
+  return { sequences, championTeams, loading, error }
 }

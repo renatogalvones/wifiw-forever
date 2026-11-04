@@ -422,7 +422,7 @@ const funStatLists: Array<{ key: PlayerStatKey; title: string }> = [
 function Estatisticas({ players }: { players: RankingPlayer[] }) {
   const { matches, loading, error } = useRivalryMatches()
   const { finishes, loading: finishesLoading, error: finishesError } = useChampionshipPositionStats()
-  const { sequences, loading: sequencesLoading, error: sequencesError } = useChampionshipTitleSequences()
+  const { championTeams, loading: championTeamsLoading, error: championTeamsError } = useChampionshipTitleSequences()
   const { seasonWins, loading: seasonWinsLoading, error: seasonWinsError } = useSeasonChampionshipWins()
   const [selectedSeason, setSelectedSeason] = useState('all')
 
@@ -605,8 +605,8 @@ function Estatisticas({ players }: { players: RankingPlayer[] }) {
       .slice(0, 15)
   }, [players, seasonWins])
 
-  if (loading || finishesLoading || sequencesLoading || seasonWinsLoading) return <p className="page-message">Carregando estatísticas...</p>
-  if (error || finishesError || sequencesError || seasonWinsError) return <p className="page-message page-error">Não foi possível carregar as estatísticas: {error ?? finishesError ?? sequencesError ?? seasonWinsError}</p>
+  if (loading || finishesLoading || championTeamsLoading || seasonWinsLoading) return <p className="page-message">Carregando estatísticas...</p>
+  if (error || finishesError || championTeamsError || seasonWinsError) return <p className="page-message page-error">Não foi possível carregar as estatísticas: {error ?? finishesError ?? championTeamsError ?? seasonWinsError}</p>
 
   return (
     <div className="player-stats-content">
@@ -643,48 +643,36 @@ function Estatisticas({ players }: { players: RankingPlayer[] }) {
             </section>
           ))}
         </div>
-      </section>
-
-      <section className="title-streaks" aria-labelledby="title-streaks-title">
-        <div className="resenha-list-head">
-          <div>
-            <div className="eyebrow">Campeões consecutivos</div>
-            <h3 id="title-streaks-title">Sequências de títulos</h3>
+        <section className="champion-team-stats" aria-labelledby="champion-team-stats-title">
+          <div className="resenha-list-head">
+            <div>
+              <div className="eyebrow">Clubes vencedores</div>
+              <h4 id="champion-team-stats-title">Times campeões</h4>
+            </div>
           </div>
-          <p>Maior sequência primeiro</p>
-        </div>
-        {sequences.length === 0 ? (
-          <p className="page-message">Não há sequências de títulos consecutivos registradas.</p>
-        ) : (
-          <div className="scroll rivalry-scroll title-streaks-scroll">
+          <div className="scroll rivalry-scroll champion-team-stats-scroll">
             <table>
               <thead>
-                <tr>
-                  <th>Pos.</th>
-                  <th>Treinador</th>
-                  <th>Seguidos</th>
-                  <th>Campeonatos</th>
-                </tr>
+                <tr><th>Pos.</th><th>Time</th><th>Títulos</th><th>Treinadores campeões</th></tr>
               </thead>
               <tbody>
-                {sequences.map((sequence, index) => (
-                  <tr key={`${sequence.firstId}-${sequence.lastId}`}>
+                {championTeams.map(({ team, titles, players: teamPlayers }, index) => (
+                  <tr key={team}>
                     <td>{String(index + 1).padStart(2, '0')}</td>
-                    <td>{displayRivalryPlayer(sequence.champion)}</td>
-                    <td>{sequence.length}</td>
-                    <td>
-                      <ol className="title-streak-championships">
-                        {sequence.championships.map((championship, championshipIndex) => (
-                          <li key={`${sequence.firstId}-${championshipIndex}`}>{championship}</li>
-                        ))}
-                      </ol>
+                    <td>{team}</td>
+                    <td>{titles}</td>
+                    <td className="champion-team-coaches">
+                      {[...teamPlayers]
+                        .sort((a, b) => displayRivalryPlayer(a).localeCompare(displayRivalryPlayer(b), 'pt-BR'))
+                        .map(displayRivalryPlayer)
+                        .join(' · ')}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        )}
+        </section>
       </section>
 
       <section className="season-title-tops title-streaks" aria-labelledby="season-title-tops-title">
@@ -700,14 +688,23 @@ function Estatisticas({ players }: { players: RankingPlayer[] }) {
           <div className="scroll rivalry-scroll season-title-tops-scroll">
             <table>
               <thead>
-                <tr><th>Pos.</th><th>Treinador</th><th>Títulos na temporada</th><th>Temporada</th></tr>
+                <tr><th>Pos.</th><th>Treinador</th><th>Títulos na temporada</th><th>Times</th><th>Temporada</th></tr>
               </thead>
               <tbody>
-                {topSeasonChampionshipWins.map(({ player, season, wins }, index) => (
+                {topSeasonChampionshipWins.map(({ player, season, wins, championships }, index) => (
                   <tr key={`${player}-${season}`}>
                     <td>{String(index + 1).padStart(2, '0')}</td>
                     <td>{displayRivalryPlayer(player)}</td>
                     <td>{wins}</td>
+                    <td className="season-title-winner-teams">
+                      <ol className="title-streak-championships">
+                        {championships.map(({ name, team }, championshipIndex) => (
+                          <li key={`${name}-${championshipIndex}`}>
+                            {name}{team && <> - <span className="title-streak-championship-team">{team}</span></>}
+                          </li>
+                        ))}
+                      </ol>
+                    </td>
                     <td>{season}</td>
                   </tr>
                 ))}
@@ -764,6 +761,7 @@ type ChampionshipTitle = {
 }
 
 function Glorias({ players }: { players: RankingPlayer[] }) {
+  const { sequences, loading: sequencesLoading, error: sequencesError } = useChampionshipTitleSequences()
   const [titles, setTitles] = useState<ChampionshipTitle[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -836,8 +834,8 @@ function Glorias({ players }: { players: RankingPlayer[] }) {
     }))
   }, [players, titles])
 
-  if (loading) return <p className="page-message">Carregando títulos...</p>
-  if (error) return <p className="page-message page-error">Não foi possível carregar os títulos: {error}</p>
+  if (loading || sequencesLoading) return <p className="page-message">Carregando títulos...</p>
+  if (error || sequencesError) return <p className="page-message page-error">Não foi possível carregar os títulos: {error ?? sequencesError}</p>
 
   return (
     <div className="glorias-content">
@@ -871,6 +869,52 @@ function Glorias({ players }: { players: RankingPlayer[] }) {
           </article>
         ))}
       </div>
+      <section className="title-streaks" aria-labelledby="title-streaks-title">
+        <div className="resenha-list-head">
+          <div>
+            <div className="eyebrow">Campeões consecutivos</div>
+            <h3 id="title-streaks-title">Sequências de títulos</h3>
+          </div>
+          <p>Maior sequência primeiro</p>
+        </div>
+        {sequences.length === 0 ? (
+          <p className="page-message">Não há sequências de títulos consecutivos registradas.</p>
+        ) : (
+          <div className="scroll rivalry-scroll title-streaks-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Pos.</th>
+                  <th>Treinador</th>
+                  <th>Seguidos</th>
+                  <th>Campeonatos</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sequences.map((sequence, index) => (
+                  <tr key={`${sequence.firstId}-${sequence.lastId}`}>
+                    <td>{String(index + 1).padStart(2, '0')}</td>
+                    <td>{displayRivalryPlayer(sequence.champion)}</td>
+                    <td>{sequence.length}</td>
+                    <td>
+                      <ol className="title-streak-championships">
+                        {sequence.championships.map(({ name, team }, championshipIndex) => (
+                          <li key={`${sequence.firstId}-${championshipIndex}`}>
+                            <span>
+                              {name}
+                              {team && <> - <span className="title-streak-championship-team">{team}</span></>}
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   )
 }
